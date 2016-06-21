@@ -1,0 +1,227 @@
+---
+title: "Cognition brief"
+author: "Ewan Dunbar"
+date: "20 juin 2016"
+output: html_document
+---
+
+```{r setup, include=F}
+library(suprvenr)
+library(readr)
+library(purrr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(emdplot)
+library(xtable)
+n_bootstrap <- 1000
+```
+
+#Introduction
+
+#Materials
+
+```{r load, include=F, cache=T}
+test_pairs <- read_csv("test_pairs.csv")
+encodings <- read_csv("encoding_filenames.csv") %>%
+  mutate(encoding=purrr::map(filename,
+                             ~ encoding(read_csv(.), transformation=zscore)))
+example_encoding <- encoding(read_csv(encodings$filename[[1]]),
+                             transformation=whiten_pca, k=2)
+```
+
+#The direction test
+
+The direction test assesses how well the minimal distinctions implied by a
+discrete representation of a set are preserved in some other representation of
+that set. It gives a score for each dimension which scores how consistently
+the pairs of elements that differ minimally on that dimension are related
+to each other by a translation in a single direction. The discrete
+representation we are testing is a binary feature representation of English
+consonants. Many features have associated with them several pairs that differ
+exclusively in the value of that feature. For example, the feature
+[voice] has associated with it the pairs of phonemes [p]/[b],
+[t]/[d], [k]/[ɡ], [f]/[v], [s]/[z], and [ʃ]/[ʒ]. The direction test will
+assess the three phonetic representations to assess whether these pairs are
+all related to each other in a unique and consistent way, by translation in
+the same direction. The complete list of pairs is given in Table XXX.
+
+```{r pair-table, echo=F, results='asis'}
+test_pairs_wide <- test_pairs %>%
+                   group_by(Feature=fname) %>%
+                   summarize(Pairs=paste(pair_labels(x1, x2, "/"), collapse=", "))
+test_pairs_wide$Feature <- factor(test_pairs_wide$Feature,
+                                  levels=c("Coronal/dorsal", "Coronal/labial", "Labial/dorsal",
+                                           "Height", "Continuant", "Delayed release", 
+                                           "Sonorant", "Nasal",
+                                           "Voice"))
+print(xtable(test_pairs_wide), type="html", include.rownames=F)
+```
+
+The direction test for a feature F works by comparing the minimally distinct pairs for F to each other (on the one hand) and to a set of reference pairs which are not minimally distinct for F (on the other). Figure XXX illustrates the first step of the direction test on the feature [nasal] (we use a two-dimensional space derived through principal component analysis to illustrate). The set of minimally distinct pairs for [nasal] (dark blue) are compared against reference pairs (light orange). Here, for illustration, we use [s]/[z] and [d]/[z]. (In the test as we perform it below, we use all the other pairs in Table XXX as reference pairs.) For all these pairs, the vector subtraction is taken. 
+
+```{r mptest-example-phones, echo=F}
+example_phones <- get.encoding(example_encoding, c("b","m","n","ɡ","ŋ","d","z","s"))
+example_pair_info <- data.frame(
+  Feature=factor(rep(c("Nasal","Nasal","Nasal","Other","Other"), 2),
+                 levels=c("Other","Nasal")),
+  pair=rep(c("Pair1","Pair2","Pair3","Pair4","Pair5"), 2),
+  label=c(c("b","d","ɡ","d","s"),c("m","n","ŋ","z","z")),
+  Phone=c(rep("Phone1",5), rep("Phone2",5))
+)
+example_pairs <- reshape(merge(example_pair_info, example_phones),
+                         direction="wide", timevar="Phone",
+                         idvar=c("pair","Feature"))
+example_pairs$norm <- with(example_pairs,
+                           sqrt((PC1.Phone2-PC1.Phone1)^2 +
+                           (PC2.Phone2-PC2.Phone1)^2))
+fig_mptest_points <- ggplot(example_phones, aes(x=PC1, y=PC2, label=label)) +
+  geom_segment(data=example_pairs, aes(x=PC1.Phone1, xend=PC1.Phone2,
+                                       y=PC2.Phone1, yend=PC2.Phone2,
+                                       label=NA, colour=Feature), lwd=1.7,
+               arrow=arrow(type="closed", length=unit(0.2, "inches"))) +  
+  geom_segment(data=example_pairs, aes(x=PC1.Phone1, xend=PC1.Phone2,
+                                       y=PC2.Phone1, yend=PC2.Phone2,
+                                       label=NA), lwd=0.5) +
+  geom_point(size=2.5) +
+  geom_text(aes(y=PC2-0.3), size=6) +
+  scale_colour_manual(values=emd_palette(example_pairs$Feature)) +
+  coord_cartesian(xlim=c(-1,1), ylim=c(-2.1,2.1)) +
+  emd_theme() +
+  theme(legend.position="none")
+print(fig_mptest_points)
+```
+
+The mutual similarity of the vector subtractions corresponding to [nasal], as a group, as regards their direction, is expected to be statistically greater than the similarity of [nasal] subtractions with subtractions derived from reference pairs. A single pair of subtractions can be compared as regards their direction by taking the cosine of the angle between them. Values close to zero indicate nearly orthogonal vectors; values close to one indicate vectors in nearly the same direction; values close to negative one indicate vectors in nearly opposite directions. Figure XXX shows the same subtraction vectors as in Figure XXX, placed at the origin and normalized to length one to illustrate the differences and similarities in their direction. The cosine of the angle between [d]/[n] and [ɡ]/[ŋ] here is
+`r cossim(with(example_pairs[example_pairs$label.Phone1=="ɡ",], c(PC1.Phone2-PC1.Phone1, PC2.Phone2-PC2.Phone1)), with(example_pairs[example_pairs$label.Phone2=="n",], c(PC1.Phone2-PC1.Phone1, PC2.Phone2-PC2.Phone1))) %>% round(digits=3)`,
+while the cosine of the angle between [d]/[n] and [s]/[z] is
+`r cossim(with(example_pairs[example_pairs$label.Phone1=="s",], c(PC1.Phone2-PC1.Phone1, PC2.Phone2-PC2.Phone1)), with(example_pairs[example_pairs$label.Phone2=="n",], c(PC1.Phone2-PC1.Phone1, PC2.Phone2-PC2.Phone1))) %>% round(digits=3)`.
+
+```{r mptest-example-pairs, echo=F, fig.width=5, fig.height=5}
+example_pairs$xend <- with(example_pairs, (PC1.Phone2-PC1.Phone1)/norm)
+example_pairs$yend <- with(example_pairs, (PC2.Phone2-PC2.Phone1)/norm)
+example_pairs$text_x <- with(example_pairs, xend*1.13)
+example_pairs$text_y <- with(example_pairs, yend*1.13)
+example_pairs$text_y[example_pairs$label.Phone1=="ɡ"] <-
+        example_pairs$text_y[example_pairs$label.Phone1=="ɡ"] + 0.2
+example_pairs$text_x[example_pairs$label.Phone1=="ɡ"] <-
+        example_pairs$text_x[example_pairs$label.Phone1=="ɡ"] - 0.1
+fig_mptest_pairs <- ggplot(example_pairs, aes(x=PC1, y=PC2, label=label)) +
+  geom_segment(data=example_pairs, aes(x=0, xend=xend, y=0, yend=yend, label=NA, 
+                                       colour=Feature), lwd=1.7,
+               arrow=arrow(type="closed", length=unit(0.2, "inches"))) +  
+  geom_segment(data=example_pairs, aes(x=0, xend=xend, y=0, yend=yend, label=NA),
+               lwd=0.5) +  
+  geom_point(aes(x=0,y=0,label=NA), size=2.5) +
+  geom_point(aes(x=xend,y=yend,label=NA), size=2.5) +
+  geom_text(aes(x=text_x,y=text_y,
+                label=pair_labels(label.Phone1, label.Phone2, "/")), size=6) +
+  scale_colour_manual(values=emd_palette(example_pairs$Feature)) +
+  coord_cartesian(xlim=c(-1.4,1.4), ylim=c(-1.4,1.4)) +
+  emd_theme() +
+  theme(legend.position="none")
+print(fig_mptest_pairs)
+```
+
+We consider the ideal case for two subtractions corresponding to the same feature to be that the cosine of their angle be one, and anything less than one (through zero all the way to negative one) to represent a failure of the representation to encode that feature using a consistent direction for that pair of subtractions. For two subtractions corresponding to two different features, we consider the ideal case to be that the cosine of their angle be zero, and anything greater or less than zero (either in the direction of positive or negative one) to represent a failure of the representation to distinguish the two features for that pair of subtractions. For each pair of vector subtractions, we therefore compute the following similarity score.
+
+$$\mathrm{sim(}x, y\mathrm{)} =
+          \left\{\begin{array}{ll}
+              \frac{x\cdot y}{\left\lVert x\right\rVert\left\lVert y\right\rVert} &
+                 \mbox{if }x\mbox{ and }y\mbox{ correspond to the same feature}\\ 
+              \left|\frac{x\cdot y}{\left\lVert x\right\rVert\left\lVert y\right\rVert}\right| &
+                 \mbox{if }x\mbox{ and }y\mbox{ correspond to different features}\\ 
+          \end{array}\right.$$
+          
+We assess whether, by this similarity score, the pairs of subtractions that both correspond to a given feature are systematically higher than the pairs of subtractions that do not both correspond to that feature.
+
+The fact that subtractions representing the same feature are only considered similar if their cosine is positive derives from the setup of the test. As can be seen in Table XXX, all the pairs corresponding to any given feature are all stated in the same order (for example, for the feature nasal, oral followed by nasal). We impose this constraint and always calculate the subtractions the same way (the second element minus the first: for example, nasal minus oral). Thus, a negative cosine, corresponding to the opposite direction, would be unexpected if the feature is coded consistently.  On the other hand, the fact that, for pairs representing two different features, both directions (negative and positive) are deviations from the ideal derives from a related fact about the setup that can be seen in Table XXX: each pair is only tested in one order. We do not perform two separate tests for [-voice]/[+voice], on the one hand, and [+voice]/[-voice], on the other. Thus, among the reference pairs for a given feature, there will be no pairs corresponding to the same feature, subtracted in the opposite direction. Any reference-pair subtractions which actually have a cosine of negative one with respect to some given subtraction are thus treated as failures to match the feature encoding.
+
+For each feature, this yields two (highly unbalanced) sets of similarity scores. For example, consider Figure XXX, which shows two histograms of similarity scores between pairs of subtraction vectors in the example two-dimensional space. The pairs where both subtractions correspond to the feature [nasal] are shown in dark blue, and those where only one of the subtractions corresponds to the feature [nasal] are shown in light orange.
+
+```{r example-mptest, echo=F, message=F}
+example_mptests <- joint_mptests(example_encoding, test_pairs, similarity=cosabscossim,
+              similarity_param=test_pairs$fname)
+example_nasal_test <- example_mptests$data[[1]]
+median_sim <- median(example_nasal_test$similarity)
+median_crit_i <- which.min(abs(example_mptests$roc[[1]]$crit - median_sim))
+fig_hist <- with(example_nasal_test,
+     hist_overlapping(similarity, same_different,
+                      var_measure_name="Subtraction similarity",
+                      var_group_name = "Feature is")) +
+  emd_theme()
+print(fig_hist)
+```
+
+Informally, the same-feature similarity scores are higher than most (but not all) of the different-feature similarity scores.  A statistic that evaluates the degree to which the same-feature similarity scores are higher than the different-feature similarity scores is the area under the empirical receiver operating curve (ROC): the AUC (area under the curve).
+
+The empirical ROC for two groups of one-dimensional observations assesses the error rate that would be obtained trying to split the two groups using a simple linear classification rule. Each empirically observed similarity score $s$ yields a different hypothetical classification rule in which all scores greater than $s$ are classified as "same," and all scores less than $s$ are classified as different. For example, one such  rule might use the median score over all observations (in this case, `r round(median_sim, digits=3)`). On the task of identifying same-feature subtractions, this classifier would have a perfect true positive rate (proportion of actual same-feature subtractions correctly identified) of `r example_mptests$roc[[1]]$tpr[[median_crit_i]]`, but a poor (high) false positive rate of `r round(example_mptests$roc[[1]]$fpr[[median_crit_i]], digits=3)`. To obtain the empirical ROC, we enumerate all decision points and plot, as a function of the false positive rate, the maximum possible true positive rate. Figure XXX gives the full empirical ROC curve. Perfect separability by a linear classification rule would give true positive rates of one across the board, regardless of threshhold and regardless of false positive rate (except for the trivial threshhold where $s$ is the maximum observed similarity score, which yields a true positive rate of zero). Since there is some overlap in the histograms, the ROC curve falls short of this ideal: there are some threshholds (below `r round(min(example_mptests$roc[[1]]$crit[example_mptests$roc[[1]]$tpr<1]), digits=3)`) for which the true positive rate is less than one. But, because this overlap is limited to a small region, the corresponding false positive rates are low. The ROC curve leads us to conclude that the similarity of same-feature subtractions is, to a large degree, higher than the similarity of different-feature subtractions. 
+
+```{r example-roc, echo=F, fig.width=5, fig.height=5}
+fig_roc <- ggplot(example_mptests$roc[[1]], aes(y=tpr, x=fpr)) +
+  geom_line(lwd=1.5) +
+  geom_abline(slope=1, intercept=0, lwd=1.5, colour="grey", lty="dashed") +
+  xlab("False positive rate") +
+  ylab("True positive rate") +
+  emd_theme()
+print(fig_roc)
+```
+
+The AUC quantifies the degree to which this is true. The AUC corresponding to the ROC in Figure XXX is `r round(example_mptests$auc[[1]], digits=3)`. The ideal case (perfect linear separability) would give an AUC of 1; classification no better than chance would correspond to an AUC of 0.5; and similarity scores perfectly separable in the wrong direction (same-feature similarities always less than different-feature similarities) would correspond to an AUC of 0.
+
+Finally, using the AUC as a test statistic, we perform a significance test against the hypothesis that the similarity scores are not drawn from distinct groups at all. We perform a bootstrap significance test ($N=`r n_bootstrap`$). At each sample, we uniformly randomly reshuffle the mapping between similarity scores and the associated group labels (same-feature or different-feature), and then compute the predicted AUC as above. We use the bootstrap sample to calculate a one-sided $p$-value (the proportion of samples at least greater than the observed AUC).
+
+
+#Results
+
+```{r do-mptests, include=F, cache=T}
+mptests <- encodings %>%
+  transmute(encoding_name=encoding_name,
+            mptests=purrr::map(encoding,
+                               ~ joint_mptests(., test_pairs,
+                                               similarity=cosabscossim, 
+                                               similarity_param=
+                                                 test_pairs$fname)))
+mptests_summary <- mptests %>% unnest() %>% select(encoding_name, fname, auc)
+```
+
+```{r do-h0-mptests, include=F, cache=T}
+set.seed(1)
+mptests_h0 <- mptests %>%
+  transmute(encoding_name=encoding_name,
+            mptests_h0=purrr::map(mptests,
+                                  ~ hyp_nodiff_joint_mptests(., nreps=n_bootstrap)))
+set.seed(NULL)
+mptests_h0_summary <- mptests_h0 %>% unnest() %>%
+  select(encoding_name, fname, auc_real, pval)
+```
+
+Figure XXX shows the AUC scores calculated for each of the features tested, for each of the three representations. A white circle above the bar indicates that the hypothesis of identically-distributed groups was rejected at the $0.05$ level for the given feature, for the given representation. The detailed figures are presented in Table XXX.
+
+```{r figure-mptests, warning=F, echo=F}
+fig_auc_pvals <- ggplot(mptests_h0_summary, aes(fill=encoding_name, x=fname, y=auc_real)) +
+  geom_bar(stat="identity", position="dodge",colour="black") +
+  geom_point(aes(y=ifelse(pval < 0.05, 1.00, NA), group=encoding_name),
+             shape=21, fill="white",
+             position=position_dodge(width=1), size=3) +
+  geom_hline(yintercept=0.5) +
+  ylim(c(0,1)) +
+  scale_fill_manual(values=emd_palette(mptests_summary$encoding_name),
+                    name="Encoding") +
+  emd_theme() +
+  xlab("Feature") +
+  ylab("AUC") +
+  theme(axis.text.x=element_text(angle=90, hjust=1))
+print(fig_auc_pvals)
+```
+
+```{r table-mptests, warning=F, echo=F, results="asis"}
+table_auc_pvals <- reshape(as.data.frame(mptests_h0_summary),
+                           direction="wide", idvar="fname",
+                           timevar="encoding_name")
+print(xtable(table_auc_pvals), type="html", include.rownames=F)
+```
+
+#Discussion
+
+#Conclusions
