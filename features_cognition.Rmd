@@ -20,7 +20,7 @@ n_bootstrap <- 1000
 
 #Introduction
 
-Humans do not perceive speech sounds simply as noises that have no relation to one another. The [p] sound in *pot* is more similar for a human being to the [t] sound in *tot* than it is to the [g] sound in *got.* This relational structure can be observed both in how easily humans can confuse two sounds, and in the patterns that speakers of  unconsciously know about how to pronounce words in their language. For example, [p] is more easily confused with [t] than with [g] (CITATION MILLER AND NICELY 1955), and, at the same time, English pronunciation follows a set of implicit, unconscious rules whereby, for example, the plural *-s* is pronounced differently depending on what sound precedes it. These rules treat [p] and [t] the same (*-s* is pronounced as [s] in *pops* and *pots*), but [g] differently (*-s* is pronounced as [z] in *pogs*). A popular idea in linguistics to account for the cognitive relations between sounds is that part of the innate endowment that allows us to perceive speech is a representation of speech sounds in terms of *distinctive features* (CITATION JAKOBSON; CITATION CLEMENTS AND HUME). We present results suggesting that there is enough information in the phonetic experience of a child for distinctive features of English consonants to be learned, rather than innate.
+Humans do not perceive speech sounds simply as noises that have no relation to one another. The [p] sound in *pot* is more similar for a human being to the [t] sound in *tot* than it is to the [g] sound in *got.* This relational structure can be observed both in how easily humans can confuse two sounds, and in the patterns that speakers   unconsciously know about how to pronounce words in their language. For example, [p] is more easily confused with [t] than with [g] (CITATION MILLER AND NICELY 1955), and, at the same time, English pronunciation follows a set of implicit, unconscious rules whereby, for example, the plural *-s* is pronounced differently depending on what sound precedes it. These rules treat [p] and [t] the same (*-s* is pronounced as [s] in *pops* and *pots*), but [g] differently (*-s* is pronounced as [z] in *pogs*). A popular idea in linguistics to account for the cognitive relations between sounds is that part of the innate endowment that allows us to perceive speech is a representation of speech sounds in terms of *distinctive features* (CITATION JAKOBSON; CITATION CLEMENTS AND HUME). We present results suggesting that there is enough information in the phonetic experience of a child for distinctive features of English consonants to be learned, rather than innate.
 
 Distinctive feature theories claim that the internal representation of speech sounds is on a set of orthogonal dimensions, or features, each encoding some important independent aspect of sounds, generally articulatory. For example, the feature [voice] would encode the activity at the vocal folds. Furthermore, the values are discrete, and usually binary: for example, [p] and [t] would have in common that they are [-voice], while [g] is [+voice], indicating that the vocal folds vibrate for the pronunciation of [g] but not of [p] or [t]. However, all these sounds have in common that they are [-continuant] (produced by temporarily completely obstructing the vocal tract), as opposed to [+continuant] (which allow some air to pass through).
 
@@ -31,56 +31,96 @@ We apply this method not to brain representations (to see what has been learned 
 #Materials
 
 ```{r load, include=F, cache=T}
-test_pairs <- read_csv("test_pairs.csv")
-encodings <- read_csv("encoding_filenames.csv") %>%
-  mutate(encoding=purrr::map(filename,
-                             ~ encoding(read_csv(.), transformation=zscore)))
-encodings_pca <- read_csv("encoding_filenames.csv") %>%
-  mutate(encoding=purrr::map(filename,
-                             ~ encoding(read_csv(.), transformation=whiten_pca, k=5)))
-explained_var_pca <- encodings %>%
-  transmute(encoding_name=encoding_name,
-            pca_variance_proportion=purrr::map_dbl(encoding, ~ pca_variance_proportion(.$m, 5)))
+feature_order <- read.table("analysis_two/feature_order.txt",
+                            sep="", quote="", stringsAsFactors=F)[[1]]
+test_pairs <- read_csv("analysis_two/test_pairs.csv")
+encodings <- read_csv("analysis_two/encoding_filenames.csv") %>%
+             mutate(
+               encoding=purrr::map(
+                 filename,
+                 ~ encoding(read_csv(.), transformation=zscore)
+               )
+             )
+encodings_pca <- read_csv("analysis_two/encoding_filenames.csv") %>%
+             mutate(
+               encoding=purrr::map(
+                 filename,
+                 ~ encoding(read_csv(.),
+                            transformation=whiten_pca,
+                            prop_var=0.9)
+               )
+             )
 example_encoding <- encoding(read_csv(encodings$filename[[1]]),
                              transformation=whiten_pca, k=2)
+ideal_encoding <- encoding(read_csv("data/english_ideal.csv"),
+                              transformation=whiten_pca, k=2)
+
+test_pairs_long <- melt(
+  mutate(test_pairs, pair=paste0("Pair", 1:nrow(test_pairs))),
+         measure.vars = c("x1","x2"),
+         value.name = "label",
+         variable.name = "Phone")
+test_pairs_wide <- test_pairs %>%
+  group_by(Feature=fname) %>%
+  summarize(Pairs=paste(pair_labels(x1, x2, "/"), collapse=", ")) %>%
+  mutate(Feature=factor(Feature, feature_order))
 ```
 
-We compare three different vector representations of English consonants: an acoustic representation, an articulatory representation, and a combination of the two. The acoustic representation is derived from the TIMIT corpus of American English (CITATION XXX) using a simple spectrally-based technique. For each (labelled) phoneme in TIMIT, we take 11 log spectral energies on a Mel scale up to 8000Hz, each 10 ms over a large chunk of signal around the midpoint of the phoneme (assessed by the midpoint of its annotation in the corpus). The total length of this chunk is fixed at 40 such analysis frames (405 ms, given a 25 ms spectral analysis window at each frame), which includes a large amount of contextual information. We combine these into a 440-dimensional vector. To preserve only the relevant information and arrive at a single representation for a given phoneme, we take the average over all instances of that phoneme in the corpus. The articulatory representation was obtained from Jeff Mielke and is the set of derived measurements described in CITATION: MIELKE (2012). Three trained phoneticians (native speakers of American English) were measured pronouncing sounds in three V\_V contexts, and: (i) aperture measurements perpendicular to the vocal tract midline were estimated along the length of the vocal tract (down to the lower pharynx), using measures derived from ultrasound imaging, at 63 speaker-specific, evenly spaced reference points along the vocal tract, at five points over the duration of the consonant; (ii) larynx height and vocal fold contact activity were estimated for the same sounds using electroglottography; and (iii) oral and nasal airflow were measured for the same sounds (see CITATION: MIELKE (2012) for details). These make a total of 319 dimensions ($63\times 5 + 2 + 2$), which we averaged across the three speakers and the three contexts to get a single vector. The combined representation was just the 759-dimensional ($440 + 319$) vector that we get by concatenating the two.
+We compare three different vector representations of English consonants: an acoustic representation, an articulatory representation, and a combination of the two. The acoustic representation is derived from the TIMIT corpus of American English (CITATION XXX) using a simple spectrally-based technique. For each (labelled) phoneme in TIMIT, we take 11 log spectral energies on a Mel scale up to 8000Hz, each 10 ms over a large chunk of signal around the midpoint of the phoneme (assessed by the midpoint of its annotation in the corpus). The total length of this chunk is fixed at 40 such analysis frames (405 ms, given a 25 ms spectral analysis window at each frame), which includes a large amount of contextual information. We combine these into a 440-dimensional vector. To preserve only the relevant information and arrive at a single representation for a given phoneme, we take the average over all instances of that phoneme in the corpus. The articulatory representation was obtained from Jeff Mielke and is the set of derived measurements described in CITATION: MIELKE (2012). Three trained phoneticians (native speakers of American English) were measured pronouncing sounds in three V\_V contexts, and: (i) aperture measurements perpendicular to the vocal tract midline were estimated along the length of the vocal tract (down to the lower pharynx), using measures derived from ultrasound imaging, at 63 speaker-specific, evenly spaced reference points along the vocal tract, at five time points over the duration of the consonant; (ii) larynx height and vocal fold contact activity were estimated for the same sounds using electroglottography; and (iii) oral and nasal airflow were measured for the same sounds (see CITATION: MIELKE (2012) for details). These make a total of 319 dimensions ($63\times 5$ time points $+ 2 + 2$), which we averaged across the three speakers and the three contexts to get a single vector. The combined representation was just the 759-dimensional ($440 + 319$) vector that we get by concatenating the two.
 For all three representations, we converted each dimension into a z-score, which is a prerequisite for the direction test that we now explain.
 
 #The direction test
 
-The direction test assesses how well the minimal distinctions implied by a discrete representation of a set are preserved in some other representation of that set. It gives a score for each dimension which scores how consistently the pairs of elements that differ minimally on that dimension are related to each other by a translation in a single direction. The discrete representation we are testing is a binary feature representation of English consonants. Many features have associated with them several pairs that differ exclusively in the value of that feature. For example, the feature [voice] has associated with it the pairs of phonemes [p]/[b], [t]/[d], [k]/[ɡ], [f]/[v], [s]/[z], and [ʃ]/[ʒ]. The direction test will assess the three phonetic representations to assess whether these pairs are all related to each other in a unique and consistent way, by translation in the same direction. The complete list of pairs is given in Table XXX.
+The direction test assesses how well the minimal distinctions implied by a discrete representation of a set are preserved in some other representation of that set. It gives a score for each dimension which scores how consistently the pairs of elements that differ minimally on that dimension are related to each other by a translation in a single direction. The discrete representation we are testing is a binary feature representation of English consonants. Many features have associated with them several pairs that differ exclusively in the value of that feature. For example, the feature [voice] has associated with it the pairs of phonemes [p]/[b], [t]/[d], [k]/[ɡ], [f]/[v], [s]/[z], and [ʃ]/[ʒ]. The direction test will assess the three phonetic representations to assess whether these pairs are all related to each other in a unique and consistent way, by translation in the same direction. The complete list of pairs is given in Table XXX. An example of a two-dimensional representation space that would receive a perfect score on the direction test is given in Figure XXX.
 
 ```{r pair-table, echo=F, results='asis'}
-test_pairs_wide <- test_pairs %>%
-                   group_by(Feature=fname) %>%
-                   summarize(Pairs=paste(pair_labels(x1, x2, "/"), collapse=", "))
-test_pairs_wide$Feature <- factor(test_pairs_wide$Feature,
-                                  levels=c("Coronal/dorsal", "Coronal/labial", "Labial/dorsal",
-                                           "Height", "Continuant", "Delayed release", 
-                                           "Sonorant", "Nasal",
-                                           "Voice"))
 print(xtable(test_pairs_wide), type="html", include.rownames=F)
+``` 
+
+```{r mptest-ideal-phones, echo=F, fig.width=7, fig.height=7}
+ideal_phones <- get.encoding(ideal_encoding, ideal_encoding$label) %>%
+                merge(test_pairs_long %>% select(label) %>% unique)
+ideal_pairs <- reshape(merge(test_pairs_long, ideal_phones),
+                       direction="wide", timevar="Phone",
+                       idvar=c("pair","fname")) %>%
+               mutate(fname=factor(fname, levels=feature_order)) %>%
+               mutate(norm=pmap_dbl(
+                 list(as.list(PC1.x1), as.list(PC1.x2),
+                      as.list(PC2.x1), as.list(PC2.x2)),
+                 function(x1,y1,x2,y2) sqrt((x1-y1)^2+(x2-y2)^2)))
+fig_mptest_ideal_points <- ggplot(ideal_phones, aes(x=PC1, y=PC2, label=label)) +
+   geom_segment(data=ideal_pairs,
+                aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2,
+                    label=NA, colour=fname),
+                lwd=1.7) +  
+   geom_segment(data=ideal_pairs,
+                aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2,
+                label=NA, colour=fname), lwd=0.5) +
+   geom_point(size=2.5) +
+   geom_text(aes(x=PC1+0.1, y=PC2+0.15), size=6) +
+   emd_theme() +
+   scale_colour_manual(values=emd_palette(ideal_pairs$fname), name="Feature")
+ print(fig_mptest_ideal_points)
 ```
 
-The direction test for a feature F works by comparing the minimally distinct pairs for F to each other (on the one hand) and to a set of reference pairs which are not minimally distinct for F (on the other). For all pairs, the vector subtraction is taken. Figure XXX illustrates the vector subtractions for the minimally distinct pairs for the feature [nasal] (we use a two-dimensional space derived through principal component analysis to illustrate).
+The direction test for a feature F works by comparing the minimally distinct pairs for F to each other (on the one hand) and to a set of reference pairs which are not minimally distinct for F (on the other). For all pairs, the vector subtraction is taken. Figure XXX illustrates the vector subtractions for the minimally distinct pairs for the feature [nasal] (we use a two-dimensional space derived through principal component analysis on the articulatory + acoustic representation to illustrate).
 
 ```{r mptest-example-phones, echo=F}
-example_pair_info <- melt(mutate(test_pairs, pair=paste0("Pair", 1:nrow(test_pairs))),
-                          measure.vars = c("x1","x2"),
-                          value.name = "label",
-                          variable.name = "Phone") %>%
-                     mutate(Feature=factor(map_chr(as.character(fname), ~ if (. == "Nasal") . else "Other"),
-                                           levels=c("Other", "Nasal")))
+example_pair_info <- test_pairs_long %>%
+                     mutate(
+                       Feature=factor(
+                         map_chr(as.character(fname), ~ if (. == "Nasal") . else "Other"),
+                         levels=c("Other", "Nasal")
+                       )
+                     )
 example_phones <- get.encoding(example_encoding, example_encoding$label) %>%
-  merge(example_pair_info %>% select(label) %>% unique)
+                  merge(example_pair_info %>% select(label) %>% unique)
 example_pairs <- reshape(merge(example_pair_info, example_phones),
                          direction="wide", timevar="Phone",
                          idvar=c("pair","Feature","fname")) %>%
-                  mutate(norm=pmap_dbl(list(as.list(PC1.x1), as.list(PC1.x2),
-                                        as.list(PC2.x1), as.list(PC2.x2)),
-                                   function(x1,y1,x2,y2) sqrt((x1-y1)^2+(x2-y2)^2)))
+                 mutate(norm=pmap_dbl(list(as.list(PC1.x1), as.list(PC1.x2),
+                                      as.list(PC2.x1), as.list(PC2.x2)),
+                        function(x1,y1,x2,y2) sqrt((x1-y1)^2+(x2-y2)^2)))
 fig_mptest_points <- ggplot(filter(example_phones,
                                    label %in% c("b","d","ɡ","m","n","ŋ")),
                             aes(x=PC1, y=PC2, label=label)) +
@@ -98,52 +138,32 @@ fig_mptest_points <- ggplot(filter(example_phones,
   theme(legend.position="none")
 print(fig_mptest_points)
 ```
-
-We use as reference pairs all the other pairs that appear somewhere in Table XXX. The mutual similarity of the vector subtractions corresponding to [nasal], as a group, as regards their direction, is expected to be statistically greater than the similarity of [nasal] subtractions with subtractions derived from reference pairs. A single pair of subtractions can be compared as regards their direction by taking the cosine of the angle between them. Values close to zero indicate nearly orthogonal vectors; values close to one indicate vectors in nearly the same direction; values close to negative one indicate vectors in nearly opposite directions. Figure XXX shows (in dark blue) the nasal subtraction vectors from Figure XXX, placed at the origin and normalized to length one to illustrate the differences and similarities in their direction; in light orange are shown the reference pairs. The cosine of the angle between [d]/[n] and [ɡ]/[ŋ] here is
-`r cossim(with(example_pairs[example_pairs$label.x1=="ɡ",], c(PC1.x2-PC1.x1, PC2.x2-PC2.x1)), with(example_pairs[example_pairs$label.x2=="n",], c(PC1.x2-PC1.x1, PC2.x2-PC2.x1))) %>% round(digits=3)`,
-while the cosine of the angle between [d]/[n] and [p]/[k] is
-`r cossim(with(example_pairs[example_pairs$label.x1=="p" & example_pairs$label.x2=="k",], c(PC1.x2-PC1.x1, PC2.x2-PC2.x1)), with(example_pairs[example_pairs$label.x2=="n",], c(PC1.x2-PC1.x1, PC2.x2-PC2.x1))) %>% round(digits=3)`.
-
-```{r mptest-example-pairs, echo=F, fig.width=5, fig.height=5}
-example_pairs$xend <- with(example_pairs, (PC1.x2-PC1.x1)/norm)
-example_pairs$yend <- with(example_pairs, (PC2.x2-PC2.x1)/norm)
-example_pairs$text_x <- with(example_pairs, xend*1.1)
-example_pairs$text_y <- with(example_pairs, yend*1.1)
-example_pairs$text_x[example_pairs$label.x1=="ɡ"] <-
-        example_pairs$text_x[example_pairs$label.x1=="ɡ"] - 0.04
-example_pairs$text_y[example_pairs$label.x1=="ɡ"] <-
-        example_pairs$text_y[example_pairs$label.x1=="ɡ"] + 0.11
-fig_mptest_pairs <- ggplot(example_pairs, aes(x=PC1, y=PC2, label=label)) +
-  geom_segment(data=filter(example_pairs, Feature=="Other"),
-               aes(x=0, xend=xend, y=0, yend=yend, label=NA, colour=Feature),
-               lwd=1.7,
-               arrow=arrow(type="closed", length=unit(0.2, "inches"))) +  
-  geom_segment(data=filter(example_pairs, Feature=="Nasal"),
-               aes(x=0, xend=xend, y=0, yend=yend, label=NA, colour=Feature),
-               lwd=1.7,
-               arrow=arrow(type="closed", length=unit(0.2, "inches"))) +  
-  geom_segment(data=filter(example_pairs, Feature=="Nasal"),
-               aes(x=0, xend=xend, y=0, yend=yend, label=NA),
-               lwd=0.5) +  
-  geom_point(aes(x=0,y=0,label=NA), size=2.5) +
-  geom_point(data=filter(example_pairs, Feature=="Nasal"),
-             aes(x=xend,y=yend,label=NA), size=2.5) +
-  geom_text(data=filter(example_pairs, Feature=="Nasal"), aes(x=text_x,y=text_y,
-                label=pair_labels(label.x1, label.x2, "/")), size=6) +
-  geom_segment(data=filter(example_pairs, label.x1=="p", label.x2=="k"),
-               aes(x=0, xend=xend, y=0, yend=yend, label=NA),
-               lwd=0.5) +  
-  geom_point(data=filter(example_pairs, label.x1=="p", label.x2=="k"),
-             aes(x=xend,y=yend,label=NA), size=2.5) +
-  geom_text(data=filter(example_pairs, label.x1=="p", label.x2=="k"),
-            aes(x=text_x,y=text_y,
-                label=pair_labels(label.x1, label.x2, "/")), size=6) +
-  scale_colour_manual(values=emd_palette(example_pairs$Feature)) +
-  coord_cartesian(xlim=c(-1.0,1.0), ylim=c(-1.1,1.1)) +
-  emd_theme() +
-  theme(legend.position="none")
-print(fig_mptest_pairs)
+```{r example-mptest, echo=F, message=F}
+example_mptests <- joint_mptests(example_encoding, test_pairs, similarity=cosabscossim,
+              similarity_param=test_pairs$fname)
+example_nasal_test <- example_mptests$data[[1]]
+median_sim <- median(example_nasal_test$similarity)
+median_crit_i <- which.min(abs(example_mptests$roc[[1]]$crit - median_sim))
+fig_hist <- with(example_nasal_test,
+     hist_overlapping(similarity, same_different,
+                      var_measure_name="Subtraction similarity",
+                      var_group_name = "Feature is")) +
+  emd_theme()
+print(fig_hist)
 ```
+```{r example-roc, echo=F, fig.width=5, fig.height=5}
+fig_roc <- ggplot(example_mptests$roc[[1]], aes(y=tpr, x=fpr)) +
+  geom_line(lwd=1.5) +
+  geom_abline(slope=1, intercept=0, lwd=1.5, colour="grey", lty="dashed") +
+  xlab("False positive rate") +
+  ylab("True positive rate") +
+  emd_theme()
+print(fig_roc)
+```
+
+
+
+We use as reference pairs all the other pairs that appear somewhere in Table XXX. The mutual similarity of the vector subtractions corresponding to [nasal], as a group, as regards their direction, is expected to be statistically greater than the similarity of [nasal] subtractions with subtractions derived from reference pairs. A single pair of subtractions can be compared as regards their direction by taking the cosine of the angle between them. Values close to zero indicate nearly orthogonal vectors; values close to one indicate vectors in nearly the same direction; values close to negative one indicate vectors in nearly opposite directions.
 
 We consider the ideal case for two subtractions corresponding to the same feature to be that the cosine of their angle be one, and anything less than one (through zero all the way to negative one) to represent a failure of the representation to encode that feature using a consistent direction for that pair of subtractions. For two subtractions corresponding to two different features, we consider the ideal case to be that the cosine of their angle be zero, and anything greater or less than zero (either in the direction of positive or negative one) to represent a failure of the representation to distinguish the two features for that pair of subtractions. For each pair of vector subtractions, we therefore compute the following similarity score.
 
@@ -159,37 +179,12 @@ We assess whether, by this similarity score, the pairs of subtractions that both
 
 The fact that subtractions representing the same feature are only considered similar if their cosine is positive derives from the setup of the test. As can be seen in Table XXX, all the pairs corresponding to any given feature are all stated in the same order (for example, for the feature nasal, oral followed by nasal). We impose this constraint and always calculate the subtractions the same way (the second element minus the first: for example, nasal minus oral). Thus, a negative cosine, corresponding to the opposite direction, would be unexpected if the feature is coded consistently.  On the other hand, the fact that, for pairs representing two different features, both directions (negative and positive) are deviations from the ideal derives from a related fact about the setup that can be seen in Table XXX: each pair is only tested in one order. We do not perform two separate tests for [-voice]/[+voice], on the one hand, and [+voice]/[-voice], on the other. Thus, among the reference pairs for a given feature, there will be no pairs corresponding to the same feature, subtracted in the opposite direction. Any reference-pair subtractions which actually have a cosine of negative one with respect to some given subtraction are thus treated as failures to match the feature encoding.
 
-For each feature, this yields two (highly unbalanced) sets of similarity scores. For example, consider Figure XXX, which shows two histograms of similarity scores between pairs of subtraction vectors in the example two-dimensional space. The pairs where both subtractions correspond to the feature [nasal] are shown in dark blue, and those where only one of the subtractions corresponds to the feature [nasal] are shown in light orange.
-
-```{r example-mptest, echo=F, message=F}
-example_mptests <- joint_mptests(example_encoding, test_pairs, similarity=cosabscossim,
-              similarity_param=test_pairs$fname)
-example_nasal_test <- example_mptests$data[[1]]
-median_sim <- median(example_nasal_test$similarity)
-median_crit_i <- which.min(abs(example_mptests$roc[[1]]$crit - median_sim))
-fig_hist <- with(example_nasal_test,
-     hist_overlapping(similarity, same_different,
-                      var_measure_name="Subtraction similarity",
-                      var_group_name = "Feature is")) +
-  emd_theme()
-print(fig_hist)
-```
-
-Informally, the same-feature similarity scores are higher than most (but not all) of the different-feature similarity scores.  A statistic that evaluates the degree to which the same-feature similarity scores are higher than the different-feature similarity scores is the area under the empirical receiver operating curve (ROC): the AUC (area under the curve).
+For each feature, this yields two (highly unbalanced) sets of similarity scores. For example, consider Figure XXX, which shows two histograms of similarity scores between pairs of subtraction vectors in the example two-dimensional space. The pairs where both subtractions correspond to the feature [nasal] are shown in dark blue, and those where only one of the subtractions corresponds to the feature [nasal] are shown in light orange.  Informally, the same-feature similarity scores are higher than most (but not all) of the different-feature similarity scores.  A statistic that evaluates the degree to which the same-feature similarity scores are higher than the different-feature similarity scores is the area under the empirical receiver operating curve (ROC): the AUC (area under the curve).
 
 The empirical ROC for two groups of one-dimensional observations assesses the error rate that would be obtained trying to split the two groups using a simple linear classification rule. Each empirically observed similarity score $s$ yields a different hypothetical classification rule in which all scores greater than $s$ are classified as "same," and all scores less than $s$ are classified as different. For example, one such  rule might use the median score over all observations (in this case, `r round(median_sim, digits=3)`). On the task of identifying same-feature subtractions, this classifier would have a perfect true positive rate (proportion of actual same-feature subtractions correctly identified) of `r example_mptests$roc[[1]]$tpr[[median_crit_i]]`, but a poor (high) false positive rate of `r round(example_mptests$roc[[1]]$fpr[[median_crit_i]], digits=3)`. To obtain the empirical ROC, we enumerate all decision points and plot, as a function of the false positive rate, the maximum possible true positive rate. Figure XXX gives the full empirical ROC curve. Perfect separability by a linear classification rule would give true positive rates of one across the board, regardless of threshhold and regardless of false positive rate (except for the trivial threshhold where $s$ is the maximum observed similarity score, which yields a true positive rate of zero). Since there is some overlap in the histograms, the ROC curve falls short of this ideal: there are some threshholds (below `r round(min(example_mptests$roc[[1]]$crit[example_mptests$roc[[1]]$tpr<1]), digits=3)`) for which the true positive rate is less than one. But, because this overlap is limited to a small region, the corresponding false positive rates are low. The ROC curve leads us to conclude that the similarity of same-feature subtractions is, to a large degree, higher than the similarity of different-feature subtractions. 
 
-```{r example-roc, echo=F, fig.width=5, fig.height=5}
-fig_roc <- ggplot(example_mptests$roc[[1]], aes(y=tpr, x=fpr)) +
-  geom_line(lwd=1.5) +
-  geom_abline(slope=1, intercept=0, lwd=1.5, colour="grey", lty="dashed") +
-  xlab("False positive rate") +
-  ylab("True positive rate") +
-  emd_theme()
-print(fig_roc)
-```
 
-The AUC quantifies the degree to which this is true. The AUC corresponding to the ROC in Figure XXX is `r round(example_mptests$auc[[1]], digits=3)`. The ideal case (perfect linear separability) would give an AUC of 1; classification no better than chance would correspond to an AUC of 0.5; and similarity scores perfectly separable in the wrong direction (same-feature similarities always less than different-feature similarities) would correspond to an AUC of 0.
+The AUC quantifies the degree to which this is true. The AUC corresponding to the ROC in Figure XXX is `r round(example_mptests$auc[[1]], digits=3)`. The ideal case (perfect linear separability) would give an AUC of 1; classification no better than chance would correspond to an AUC of 0.5; and similarity scores perfectly separable in the wrong direction (same-feature similarities always less than different-feature similarities) would correspond to an AUC of 0. The ideal two-dimensional representation in Figure XXX would get an AUC of 1 on the direction test for every feature.
 
 Finally, using the AUC as a test statistic, we perform a significance test against the hypothesis that the similarity scores are not drawn from distinct groups at all. We perform a bootstrap significance test ($N=`r n_bootstrap`$). At each sample, we uniformly randomly reshuffle the mapping between similarity scores and the associated group labels (same-feature or different-feature), and then compute the predicted AUC as above. We use the bootstrap sample to calculate a one-sided $p$-value (the proportion of samples at least greater than the observed AUC).
 
@@ -240,10 +235,26 @@ mptests_pca_h0_summary <- mptests_pca_h0 %>% unnest() %>%
   select(encoding_name, fname, auc_real, pval)
 ```
 
+```{r mptests-summ, include=F, cache=F}
+mpsumm_all <- bind_rows(
+  mutate(mptests_h0_summary, Transformation="z-score"),
+  mutate(mptests_pca_h0_summary, Transformation="PCA (90%)")
+) %>%
+  inner_join(
+    test_pairs %>%
+    group_by(fname) %>%
+    summarize(npairs=length(fname))
+  ) %>%
+  mutate(Transformation=factor(Transformation, levels=c("z-score", "PCA (90%)"))) %>%
+  mutate(fname=factor(fname, levels=feature_order)) %>%
+  arrange(Transformation, encoding_name, fname)
+```
+
 Figure XXX shows the AUC scores calculated for each of the features tested, for each of the three representations. A white circle above the bar indicates that the hypothesis of identically-distributed groups was rejected at the $0.05$ level for the given feature, for the given representation. The detailed figures are presented in Table XXX.
 
-```{r figure-mptests, warning=F, echo=F}
-fig_auc_pvals <- ggplot(mptests_h0_summary, aes(fill=encoding_name, x=fname, y=auc_real)) +
+```{r figure-mptests, warning=F, message=F, echo=F}
+fig_auc_pvals <- ggplot(mpsumm_all,
+                        aes(fill=encoding_name, x=fname, y=auc_real)) +
   geom_bar(stat="identity", position="dodge",colour="black") +
   geom_point(aes(y=ifelse(pval < 0.05, 1.00, NA), group=encoding_name),
              shape=21, fill="white",
@@ -255,55 +266,44 @@ fig_auc_pvals <- ggplot(mptests_h0_summary, aes(fill=encoding_name, x=fname, y=a
   emd_theme() +
   xlab("Feature") +
   ylab("AUC") +
-  theme(axis.text.x=element_text(angle=90, hjust=1))
+  theme(axis.text.x=element_text(angle=90, hjust=1)) +
+  facet_wrap(~ Transformation)
 print(fig_auc_pvals)
 ```
 
 ```{r table-mptests, warning=F, echo=F, results="asis"}
-table_auc_pvals <- reshape(as.data.frame(mptests_h0_summary),
-                           direction="wide", idvar="fname",
-                           timevar="encoding_name")
-names(table_auc_pvals) <- c("Feature", "Acoustic + Articulatory (AUC)",
+table_auc_pvals <- reshape(as.data.frame(mpsumm_all),
+                           direction="wide",
+                           idvar=c("Transformation", "fname", "npairs"),
+                           timevar=c("encoding_name"))
+names(table_auc_pvals) <- c("Feature", "Transformation", "N pairs",
+                            "Acoustic + Articulatory (AUC)",
                             "Acoustic + Articulatory (p)",
                             "Acoustic (AUC)", "Acoustic (p)",
                             "Articulatory (AUC)", "Articulatory (p)")
-table_auc_pvals <- select(table_auc_pvals, Feature,
+table_auc_pvals <- select(table_auc_pvals,
+                          Transformation,
+                          Feature,
+                          `N pairs`,
                           `Acoustic (AUC)`,
                           `Acoustic (p)`,
                           `Acoustic + Articulatory (AUC)`,
                           `Acoustic + Articulatory (p)`,
                           `Articulatory (AUC)`,
-                          `Articulatory (p)`)
+                          `Articulatory (p)`
+                          )
 print(xtable(table_auc_pvals), type="html", include.rownames=F)
 ```
 
-All features are represented well in the acoustic + articulatory representation, with the exception of the distinction between the sonorants [j] and [w] and the nearest corresponding obstruents, [ʒ] and [v].
+All features are represented well in the acoustic + articulatory representation, with the exception of the distinction between the approximants [j] and [w] and the nearest corresponding obstruents, [ʒ] and [v].
 
-To take a further step towards understanding how well a learner could use these representations to extract linguistically important features from their phonetic experience, we performed a dimensionality reduction to five dimensions using principal component analysis (PCA: CITATION XXX), followed by normalization of the variance to one along these dimensions. For the three representations, the first five PCA dimensions explained `r 100*round(explained_var_pca$pca_variance_proportion[explained_var_pca$encoding_name=="Acoustic"], digits=3)` (Acoustic), `r 100*round(explained_var_pca$pca_variance_proportion[explained_var_pca$encoding_name=="Acoustic + Articulatory"], digits=3)` (Acoustic + Articulatory), and `r 100*round(explained_var_pca$pca_variance_proportion[explained_var_pca$encoding_name=="Articulatory"], digits=3)` (Articulatory) percent of the variance. The orthogonal dimensions derived from PCA are statistically prominent vectors in the data (the top five are the five orthogonal dimensions along which our vector representations vary the most). This representation is in a sense optimal for a learner using no criterion but to find a compact representation of the signal. It still encodes all the same features well.
-
-```{r figure-mptests-pca, warning=F, echo=F}
-fig_auc_pvals_pca <- ggplot(mptests_pca_h0_summary, aes(fill=encoding_name, x=fname, y=auc_real)) +
-  geom_bar(stat="identity", position="dodge",colour="black") +
-  geom_point(aes(y=ifelse(pval < 0.05, 1.00, NA), group=encoding_name),
-             shape=21, fill="white",
-             position=position_dodge(width=1), size=3) +
-  geom_hline(yintercept=0.5) +
-  ylim(c(0,1)) +
-  scale_fill_manual(values=emd_palette(mptests_pca_h0_summary$encoding_name),
-                    name="Encoding") +
-  emd_theme() +
-  xlab("Feature") +
-  ylab("AUC") +
-  theme(axis.text.x=element_text(angle=90, hjust=1))
-print(fig_auc_pvals_pca)
-```
+To take a further step towards understanding how well a learner could use these representations to extract linguistically important features from their phonetic experience, we performed a dimensionality reduction to a small number of dimensions using principal component analysis (PCA: CITATION XXX), followed by normalization of the variance to one along these dimensions. We chose the smallest number of dimensions that explained at least 90 percent of the variance (acoustic `r length(encodings_pca$encoding[[2]]$fnames)`, acoustic + articulatory `r length(encodings_pca$encoding[[1]]$fnames)`, and articulatory `r length(encodings_pca$encoding[[3]]$fnames)` dimensions). The orthogonal dimensions derived from PCA are statistically prominent vectors in the data (the top five are the five orthogonal dimensions along which our vector representations vary the most). This representation is in a sense optimal for a learner using no criterion but to find a compact representation of the signal. It still encodes all the same features well.
 
 #Conclusions
 
-We have shown that phonetic information that approximates that which would be available in the environment of an infant learning a language contains, in a precise sense, a binary feature structure for English consonants closely corresponding to that posited by linguists as innate structure. This does not necessarily imply that infants do not also have some a priori knowledge of such a structure, but it means that there is no poverty of the stimulus argument to be made about binary distinctive features. The analogy property we tested plays a role in the generalizations formed by learners that govern how words are pronounced: that [z] is the analogical [+voice] correspondent of [s], for example, is an important part of speakers' implicit generalizations about English words. Similar analogical relations are evident across the world's languages. We showed that, at least for English consonants, these analogy properties are part of the signal itself.
+We have shown that phonetic information that approximates that which would be available in the environment of an infant learning a language contains, in a precise sense, a binary feature structure for English consonants closely corresponding to that posited by linguists as innate structure. This does not necessarily imply that infants do not also have some a priori knowledge of such a structure, but it means that there is no poverty of the stimulus argument to be made about binary distinctive features with respect to their analogy properties. The analogy property we tested plays a role in the generalizations formed by learners that govern how words are pronounced: that [z] is the analogical [+voice] correspondent of [s], for example, is an important part of speakers' implicit generalizations about English words. Similar analogical relations are evident across the world's languages. We showed that, at least for English consonants, many of these analogy properties are part of the signal itself, and almost all are present in the  "extended signal" that includes articulatory information.
 
-One exception was the feature [sonorant]. We believe that it is typologically likely that [sonorant] plays only a classificatory, rather than an analogical, role in the sound patterns of languages, as many languages show phonological alternations with classes defined by this property (for example, voiceless sounds become voiced between sonorants in many languages), but we know of no alternations which change all [-sonorant] sounds into their [+sonorant] correspondent or vice versa. This is a topic for future formal typological investigation.
 
 One limitation of our study is that we assume that sounds are represented by their mean values. This would correspond to a learning scenario in which sounds have been pre-clustered by the learner before any features are learned. It could easily be the case that infants learn the features of their language, rather than the sounds of their language, meaning that they would not do this pre-clustering and would jump directly to the cross-classification in terms of features. The same direction test could be applied to individual tokens rather than representations of types. 
 
-Finally, we note that our direction test bears a relation to two other similar methods for detecting the presence of abstract structure. One is the analogy test and its variants used in computational semantics (CITATION MIKOLOV, CITATION GOLDBERG). The analogy test can be seen as a different way of scoring the direction test. In our case, it would not directly measure how similar the subtraction vectors are, but rather would take a binary decision on whether, for example, the closest sound to the result obtained by adding the [b] - [p] subtraction to [t] was in fact [d]. The method of CITATION KRIEGESKORTE asks a weaker and more general question. In this method, a reference structure is provided which yields a set of distances between objects. In this case, the reference structure would be a feature system which defines the featural distance between pairs of phones (presumably in terms of the number of features different). These similarities are then correlated with distances in a given representation space. The direction test examines only the pairs with distance one, and gives a fine-grained, feature by feature evaluation.
+Finally, we note that our direction test bears a relation to two other similar methods for detecting the presence of abstract structure. One is the analogy test and its variants used in computational semantics (CITATION MIKOLOV, CITATION GOLDBERG). The analogy test can be seen as a different way of scoring the direction test. In our case, it would not directly measure how similar the subtraction vectors are, but rather would take a binary decision on whether, for example, the closest sound to the result obtained by adding the [b] - [p] subtraction to [t] was in fact [d]. This poses serious problems as discussed in CITATION TAL. The method of CITATION KRIEGESKORTE asks a weaker and more general question. In this method, a reference structure is provided which yields a set of distances between objects. In this case, the reference structure would be a feature system which defines the featural distance between pairs of phones (presumably in terms of the number of features different). These similarities are then correlated with distances in a given representation space. The direction test examines only the pairs with distance one, and gives a fine-grained, feature by feature evaluation of the relations between those pairs.

@@ -1,0 +1,7 @@
+Coronal/dorsal
+Coronal/labial
+Palatal
+Continuant
+Approximant
+Nasal
+Voice
