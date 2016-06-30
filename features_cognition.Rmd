@@ -91,14 +91,12 @@ ideal_pairs <- reshape(merge(test_pairs_long, ideal_phones),
 fig_mptest_ideal_points <- ggplot(ideal_phones, aes(x=PC1, y=PC2, label=label)) +
    geom_segment(data=ideal_pairs,
                 aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2,
-                    label=NA, colour=fname),
+                    label=NA, colour=fname, lty=fname),
                 lwd=1.7) +  
-   geom_segment(data=ideal_pairs,
-                aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2,
-                label=NA, colour=fname), lwd=0.5) +
    geom_point(size=2.5) +
    geom_text(aes(x=PC1+0.1, y=PC2+0.15), size=6) +
    emd_theme() +
+   scale_linetype_manual(values=factor_grouped(ideal_pairs$fname, c(1,4)), name="Feature") +
    scale_colour_manual(values=emd_palette(ideal_pairs$fname), name="Feature")
  print(fig_mptest_ideal_points)
 ```
