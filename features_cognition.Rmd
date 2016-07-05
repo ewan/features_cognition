@@ -19,6 +19,23 @@ n_bootstrap <- 1000
 ```
 
 #Introduction
+<!--- [ED]
+proposed plan
+
+- Human languages use a finite inventories of sounds (consonants and vowels) to make up words
+- Linguists propose that these inventories are not simply lists of atomic perceptual or articulatory categories but that they have an internal structure: they are bundled of binary features
+- Such internal structure makes it possible to express in a compact way a host of linguistic phenomena (phonological processes)
+- they also enable to explain psycholinguistic phenomena (eg, learning of artificial grammars, speech errors)
+- one question unsolved: where do these features come from? 
+   - innate response
+   - acquired response
+- difficult to test because feature systems in the brain or in learning systems may be encoded in a nontransparent way (eg as patterns of discharges, as a distributed code)
+- our contribution: 
+  - we provide a test for one important aspect of feature systems (systematicity)
+  - we show that sensory information (acoustic and articulatory) provide already a representation which is systematic in the above designed sense
+  - we then discuss on the consequences for where do features come from
+
+--->
 
 Humans do not perceive speech sounds simply as noises that have no relation to one another. The [p] sound in *pot* is more similar for a human being to the [t] sound in *tot* than it is to the [g] sound in *got.* This relational structure can be observed both in how easily humans can confuse two sounds, and in the patterns that speakers   unconsciously know about how to pronounce words in their language. For example, [p] is more easily confused with [t] than with [g] (CITATION MILLER AND NICELY 1955), and, at the same time, English pronunciation follows a set of implicit, unconscious rules whereby, for example, the plural *-s* is pronounced differently depending on what sound precedes it. These rules treat [p] and [t] the same (*-s* is pronounced as [s] in *pops* and *pots*), but [g] differently (*-s* is pronounced as [z] in *pogs*). A popular idea in linguistics to account for the cognitive relations between sounds is that part of the innate endowment that allows us to perceive speech is a representation of speech sounds in terms of *distinctive features* (CITATION JAKOBSON; CITATION CLEMENTS AND HUME). We present results suggesting that there is enough information in the phonetic experience of a child for distinctive features of English consonants to be learned, rather than innate.
 
