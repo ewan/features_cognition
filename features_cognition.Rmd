@@ -41,6 +41,7 @@ encodings <- read_csv("analysis_two/encoding_filenames.csv") %>%
                  ~ encoding(read_csv(.), transformation=zscore)
                )
              )
+encoding_order <- encodings[["encoding_name"]]
 encodings_pca <- read_csv("analysis_two/encoding_filenames.csv") %>%
              mutate(
                encoding=purrr::map(
@@ -50,7 +51,7 @@ encodings_pca <- read_csv("analysis_two/encoding_filenames.csv") %>%
                             prop_var=0.9)
                )
              )
-example_encoding <- encoding(read_csv(encodings$filename[[1]]),
+example_encoding <- encoding(read_csv(encodings$filename[[3]]),
                              transformation=whiten_pca, k=2)
 ideal_encoding <- encoding(read_csv("data/english_ideal.csv"),
                               transformation=whiten_pca, k=2)
@@ -77,7 +78,14 @@ The direction test assesses how well the minimal distinctions implied by a discr
 print(xtable(test_pairs_wide), type="html", include.rownames=F)
 ``` 
 
-```{r mptest-ideal-phones, echo=F, fig.width=7, fig.height=7}
+```{r mptest-ideal-phones, echo=F, fig.height=6, fig.width=7}
+ideal_grey_scale_manual <- c(Palatal="#000000",
+                             `Coronal/dorsal`="#4a4a4a",
+                             Continuant="#d0d0d0",
+                             Approximant="#aaaaaa",
+                             `Coronal/labial`="#e0e0e0",
+                             Voice="#999999",
+                             Nasal="#cacaca")
 ideal_phones <- get.encoding(ideal_encoding, ideal_encoding$label) %>%
                 merge(test_pairs_long %>% select(label) %>% unique)
 ideal_pairs <- reshape(merge(test_pairs_long, ideal_phones),
@@ -88,29 +96,70 @@ ideal_pairs <- reshape(merge(test_pairs_long, ideal_phones),
                  list(as.list(PC1.x1), as.list(PC1.x2),
                       as.list(PC2.x1), as.list(PC2.x2)),
                  function(x1,y1,x2,y2) sqrt((x1-y1)^2+(x2-y2)^2)))
+
 fig_mptest_ideal_points <- ggplot(ideal_phones, aes(x=PC1, y=PC2, label=label)) +
    geom_segment(data=ideal_pairs,
-                aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2,
-                    label=NA, colour=fname, lty=fname),
-                lwd=1.7) +  
-   geom_point(size=2.5) +
-   geom_text(aes(x=PC1+0.1, y=PC2+0.15), size=6) +
+                aes(x=PC1.x1, xend=PC1.x2, y=PC2.x1, yend=PC2.x2, label=NA, 
+                    colour=fname),
+                lwd=2) +  
+   geom_point(size=12, shape=21, fill="white", colour="black", stroke=2) +
+   geom_text(aes(x=PC1, y=PC2), size=6) +
+   xlab("Dimension 1") +
+   ylab("Dimension 2") +
    emd_theme() +
-   scale_linetype_manual(values=factor_grouped(ideal_pairs$fname, c(1,4)), name="Feature") +
-   scale_colour_manual(values=emd_palette(ideal_pairs$fname), name="Feature")
+   scale_colour_manual(values=ideal_grey_scale_manual, name="Feature", guide="none") +
+   theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+         panel.border=element_blank())
  print(fig_mptest_ideal_points)
+```
+ 
+```{r mptest-ideal-phones-legend, echo=F, fig.width=4.8, fig.height=3.84}
+ideal_offsets <- ideal_pairs %>%
+  select(-pair, -label.x1, -label.x2) %>%
+  group_by(fname) %>%
+  do(bind_cols(
+    select(slice(., 1), fname),
+    (select(slice(., 1), ends_with(".x2")) %>% unlist) -
+      (select(slice(., 1), ends_with(".x1")) %>% unlist) %>%
+      t %>% as_data_frame
+  )) %>%
+  do(bind_cols(
+    slice(., 1),
+    data_frame(norm=(select(slice(., 1), -fname) %>% unlist)^2 %>% sum %>% sqrt)
+  )) %>%
+  ungroup %>%
+  mutate_at(vars(starts_with("PC")), function(x) x/(.$norm)) %>%
+  select(fname, PC=starts_with("PC")) %>%
+  mutate(line_end_1=PC1*c(0.7,1,0.8,0.6,0.8,0.8,0.8),
+         line_end_2=PC2*c(0.7,1,0.8,0.6,0.8,0.8,0.8))
+fig_mptest_ideal_legend <- ggplot(ideal_offsets,
+                                  aes(x=0, y=0, xend=line_end_1, yend=line_end_2,
+                                      label=fname)) + 
+  geom_segment(aes(label=NA, colour=fname), lwd=2, arrow=arrow(type="closed")) +
+  geom_point(aes(x=line_end_1,y=line_end_2), size=4, shape=21, fill="white") +
+  geom_point(aes(x=0,y=0), size=4, shape=21, fill="white") +
+  geom_text(aes(x=PC1+c( 0.27, 0   , 0   ,-0.03, 0.1 , 0.1 , 0.1 ),
+                y=PC2+c(-0.12,-0.2 , 0.05, 0.11,-0.05, 0.13, 0   )),
+            size=5) +
+  xlim(c(-1.5, 1.5)) +
+  ylim(c(-1.3, 1.3)) +
+  emd_theme() +
+  theme(panel.border=element_blank(), panel.grid.major=element_blank(), 
+        panel.grid.minor=element_blank(), axis.text.x=element_blank(), 
+        axis.text.y=element_blank(), axis.ticks=element_blank(), 
+        axis.title.x=element_blank(), axis.title.y=element_blank()) +
+  scale_colour_manual(values=ideal_grey_scale_manual, guide="none")
+print(fig_mptest_ideal_legend)
 ```
 
 The direction test for a feature F works by comparing the minimally distinct pairs for F to each other (on the one hand) and to a set of reference pairs which are not minimally distinct for F (on the other). For all pairs, the vector subtraction is taken. Figure XXX illustrates the vector subtractions for the minimally distinct pairs for the feature [nasal] (we use a two-dimensional space derived through principal component analysis on the articulatory + acoustic representation to illustrate).
 
 ```{r mptest-example-phones, echo=F}
 example_pair_info <- test_pairs_long %>%
-                     mutate(
-                       Feature=factor(
+                     mutate(Feature=factor(
                          map_chr(as.character(fname), ~ if (. == "Nasal") . else "Other"),
                          levels=c("Other", "Nasal")
-                       )
-                     )
+                       ))
 example_phones <- get.encoding(example_encoding, example_encoding$label) %>%
                   merge(example_pair_info %>% select(label) %>% unique)
 example_pairs <- reshape(merge(example_pair_info, example_phones),
@@ -133,19 +182,20 @@ fig_mptest_points <- ggplot(filter(example_phones,
   geom_text(aes(y=PC2-0.3), size=6) +
   scale_colour_manual(values=emd_palette(example_pairs$Feature)) +
   emd_theme() +
-  theme(legend.position="none")
+  theme(legend.position="none") +
+  xlab("Dimension 1") +
+  ylab("Dimension 2")
 print(fig_mptest_points)
 ```
 ```{r example-mptest, echo=F, message=F}
-example_mptests <- joint_mptests(example_encoding, test_pairs, similarity=cosabscossim,
-              similarity_param=test_pairs$fname)
+example_mptests <- joint_mptests(example_encoding, test_pairs, similarity=cossim)
 example_nasal_test <- example_mptests$data[[1]]
 median_sim <- median(example_nasal_test$similarity)
 median_crit_i <- which.min(abs(example_mptests$roc[[1]]$crit - median_sim))
 fig_hist <- with(example_nasal_test,
      hist_overlapping(similarity, same_different,
                       var_measure_name="Subtraction similarity",
-                      var_group_name = "Feature is")) +
+                      var_group_name = "Feature is", bins=31)) +
   emd_theme()
 print(fig_hist)
 ```
@@ -179,12 +229,12 @@ The fact that subtractions representing the same feature are only considered sim
 
 For each feature, this yields two (highly unbalanced) sets of similarity scores. For example, consider Figure XXX, which shows two histograms of similarity scores between pairs of subtraction vectors in the example two-dimensional space. The pairs where both subtractions correspond to the feature [nasal] are shown in dark blue, and those where only one of the subtractions corresponds to the feature [nasal] are shown in light orange.  Informally, the same-feature similarity scores are higher than most (but not all) of the different-feature similarity scores.  A statistic that evaluates the degree to which the same-feature similarity scores are higher than the different-feature similarity scores is the area under the empirical receiver operating curve (ROC): the AUC (area under the curve).
 
-The empirical ROC for two groups of one-dimensional observations assesses the error rate that would be obtained trying to split the two groups using a simple linear classification rule. Each empirically observed similarity score $s$ yields a different hypothetical classification rule in which all scores greater than $s$ are classified as "same," and all scores less than $s$ are classified as different. For example, one such  rule might use the median score over all observations (in this case, `r round(median_sim, digits=3)`). On the task of identifying same-feature subtractions, this classifier would have a perfect true positive rate (proportion of actual same-feature subtractions correctly identified) of `r example_mptests$roc[[1]]$tpr[[median_crit_i]]`, but a poor (high) false positive rate of `r round(example_mptests$roc[[1]]$fpr[[median_crit_i]], digits=3)`. To obtain the empirical ROC, we enumerate all decision points and plot, as a function of the false positive rate, the maximum possible true positive rate. Figure XXX gives the full empirical ROC curve. Perfect separability by a linear classification rule would give true positive rates of one across the board, regardless of threshhold and regardless of false positive rate (except for the trivial threshhold where $s$ is the maximum observed similarity score, which yields a true positive rate of zero). Since there is some overlap in the histograms, the ROC curve falls short of this ideal: there are some threshholds (below `r round(min(example_mptests$roc[[1]]$crit[example_mptests$roc[[1]]$tpr<1]), digits=3)`) for which the true positive rate is less than one. But, because this overlap is limited to a small region, the corresponding false positive rates are low. The ROC curve leads us to conclude that the similarity of same-feature subtractions is, to a large degree, higher than the similarity of different-feature subtractions. 
+The empirical ROC for two groups of one-dimensional observations assesses the error rate that would be obtained trying to split the two groups using a simple linear classification rule. Each empirically observed similarity score $s$ yields a different hypothetical classification rule in which all scores greater than $s$ are classified as "same," and all scores less than $s$ are classified as different. For example, one such  rule might use the median score over all observations (in this case, `r round(median_sim, digits=3)`). On the task of identifying same-feature subtractions, this classifier would have a perfect true positive rate (proportion of actual same-feature subtractions correctly identified) of `r example_mptests$roc[[1]]$tpr[[median_crit_i]]`, but a poor (high) false positive rate of `r round(example_mptests$roc[[1]]$fpr[[median_crit_i]], digits=3)`. To obtain the empirical ROC, we enumerate all decision points and plot, as a function of the false positive rate, the maximum possible true positive rate. Figure XXX gives the full empirical ROC curve. Perfect separability by a linear classification rule would give true positive rates of one across the board, regardless of threshhold and regardless of false positive rate (except for the trivial threshhold where $s$ is the maximum observed similarity score, which yields a true positive rate of zero). Since there is some overlap in the histograms, the ROC curve falls short of this ideal: there are some threshholds (above `r round(min(example_mptests$roc[[1]]$crit[example_mptests$roc[[1]]$tpr<1]), digits=3)`) for which the true positive rate is less than one. But, because this overlap is limited to a small region, the corresponding false positive rates are low. The ROC curve leads us to conclude that the similarity of same-feature subtractions is, to a large degree, higher than the similarity of different-feature subtractions. 
 
 
 The AUC quantifies the degree to which this is true. The AUC corresponding to the ROC in Figure XXX is `r round(example_mptests$auc[[1]], digits=3)`. The ideal case (perfect linear separability) would give an AUC of 1; classification no better than chance would correspond to an AUC of 0.5; and similarity scores perfectly separable in the wrong direction (same-feature similarities always less than different-feature similarities) would correspond to an AUC of 0. The ideal two-dimensional representation in Figure XXX would get an AUC of 1 on the direction test for every feature.
 
-Finally, using the AUC as a test statistic, we perform a significance test against the hypothesis that the similarity scores are not drawn from distinct groups at all. We perform a bootstrap significance test ($N=`r n_bootstrap`$). At each sample, we uniformly randomly reshuffle the mapping between similarity scores and the associated group labels (same-feature or different-feature), and then compute the predicted AUC as above. We use the bootstrap sample to calculate a one-sided $p$-value (the proportion of samples at least greater than the observed AUC).
+Finally, using the AUC as a test statistic, we perform a significance test against the hypothesis that the similarity scores are not drawn from distinct groups at all. We perform a bootstrap significance test ($N=`r n_bootstrap`$). At each sample, we uniformly randomly reshuffle the mapping between similarity scores and the associated group labels (same-feature or different-feature), and then compute the predicted AUC as above. We use the bootstrap sample to calculate a two-sided $p$-value
 
 
 #Results
@@ -194,9 +244,7 @@ mptests <- encodings %>%
   transmute(encoding_name=encoding_name,
             mptests=purrr::map(encoding,
                                ~ joint_mptests(., test_pairs,
-                                               similarity=cosabscossim, 
-                                               similarity_param=
-                                                 test_pairs$fname)))
+                                               similarity=cossim)))
 mptests_summary <- mptests %>% unnest() %>% select(encoding_name, fname, auc)
 ```
 
@@ -216,9 +264,7 @@ mptests_pca <- encodings_pca %>%
   transmute(encoding_name=encoding_name,
             mptests=purrr::map(encoding,
                                ~ joint_mptests(., test_pairs,
-                                               similarity=cosabscossim, 
-                                               similarity_param=
-                                                 test_pairs$fname)))
+                                               similarity=cossim)))
 mptests_pca_summary <- mptests_pca %>% unnest() %>% select(encoding_name, fname, auc)
 ```
 
@@ -235,7 +281,7 @@ mptests_pca_h0_summary <- mptests_pca_h0 %>% unnest() %>%
 
 ```{r mptests-summ, include=F, cache=F}
 mpsumm_all <- bind_rows(
-  mutate(mptests_h0_summary, Transformation="z-score"),
+  mutate(mptests_h0_summary, Transformation="Only z-score"),
   mutate(mptests_pca_h0_summary, Transformation="PCA (90%)")
 ) %>%
   inner_join(
@@ -243,28 +289,31 @@ mpsumm_all <- bind_rows(
     group_by(fname) %>%
     summarize(npairs=length(fname))
   ) %>%
-  mutate(Transformation=factor(Transformation, levels=c("z-score", "PCA (90%)"))) %>%
+  mutate(Transformation=factor(Transformation, levels=c("Only z-score", "PCA (90%)"))) %>%
   mutate(fname=factor(fname, levels=feature_order)) %>%
+  mutate(encoding_name=factor(encoding_name, levels=encoding_order)) %>%
   arrange(Transformation, encoding_name, fname)
 ```
 
 Figure XXX shows the AUC scores calculated for each of the features tested, for each of the three representations. A white circle above the bar indicates that the hypothesis of identically-distributed groups was rejected at the $0.05$ level for the given feature, for the given representation. The detailed figures are presented in Table XXX.
 
-```{r figure-mptests, warning=F, message=F, echo=F}
+```{r figure-mptests, warning=F, message=F, echo=F, fig.width=12, fig.height=6}
+encoding_colours <- c(Acoustic=emd_colours()$lightest$yellow,
+                      Articulatory=emd_colours()$light$lightblue,
+                      `Acoustic + Articulatory`="#478F47")
 fig_auc_pvals <- ggplot(mpsumm_all,
                         aes(fill=encoding_name, x=fname, y=auc_real)) +
-  geom_bar(stat="identity", position="dodge",colour="black") +
+  geom_bar(stat="identity", position=position_dodge(width=0.65),colour="black",width=0.65) +
   geom_point(aes(y=ifelse(pval < 0.05, 1.00, NA), group=encoding_name),
              shape=21, fill="white",
-             position=position_dodge(width=1), size=3) +
+             position=position_dodge(width=0.65), size=3) +
   geom_hline(yintercept=0.5) +
   ylim(c(0,1)) +
-  scale_fill_manual(values=emd_palette(mptests_h0_summary$encoding_name),
-                    name="Encoding") +
+  scale_fill_manual(values=encoding_colours, name="Encoding") +
   emd_theme() +
   xlab("Feature") +
   ylab("AUC") +
-  theme(axis.text.x=element_text(angle=90, hjust=1)) +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5)) +
   facet_wrap(~ Transformation)
 print(fig_auc_pvals)
 ```
@@ -275,27 +324,27 @@ table_auc_pvals <- reshape(as.data.frame(mpsumm_all),
                            idvar=c("Transformation", "fname", "npairs"),
                            timevar=c("encoding_name"))
 names(table_auc_pvals) <- c("Feature", "Transformation", "N pairs",
-                            "Acoustic + Articulatory (AUC)",
-                            "Acoustic + Articulatory (p)",
                             "Acoustic (AUC)", "Acoustic (p)",
-                            "Articulatory (AUC)", "Articulatory (p)")
+                            "Articulatory (AUC)", "Articulatory (p)",
+                            "Acoustic + Articulatory (AUC)",
+                            "Acoustic + Articulatory (p)")
 table_auc_pvals <- select(table_auc_pvals,
                           Transformation,
                           Feature,
                           `N pairs`,
                           `Acoustic (AUC)`,
                           `Acoustic (p)`,
-                          `Acoustic + Articulatory (AUC)`,
-                          `Acoustic + Articulatory (p)`,
                           `Articulatory (AUC)`,
-                          `Articulatory (p)`
+                          `Articulatory (p)`,
+                          `Acoustic + Articulatory (AUC)`,
+                          `Acoustic + Articulatory (p)`
                           )
 print(xtable(table_auc_pvals), type="html", include.rownames=F)
 ```
 
 All features are represented well in the acoustic + articulatory representation, with the exception of the distinction between the approximants [j] and [w] and the nearest corresponding obstruents, [ʒ] and [v].
 
-To take a further step towards understanding how well a learner could use these representations to extract linguistically important features from their phonetic experience, we performed a dimensionality reduction to a small number of dimensions using principal component analysis (PCA: CITATION XXX), followed by normalization of the variance to one along these dimensions. We chose the smallest number of dimensions that explained at least 90 percent of the variance (acoustic `r length(encodings_pca$encoding[[2]]$fnames)`, acoustic + articulatory `r length(encodings_pca$encoding[[1]]$fnames)`, and articulatory `r length(encodings_pca$encoding[[3]]$fnames)` dimensions). The orthogonal dimensions derived from PCA are statistically prominent vectors in the data (the top five are the five orthogonal dimensions along which our vector representations vary the most). This representation is in a sense optimal for a learner using no criterion but to find a compact representation of the signal. It still encodes all the same features well.
+To take a further step towards understanding how well a learner could use these representations to extract linguistically important features from their phonetic experience, we performed a dimensionality reduction to a small number of dimensions using principal component analysis (PCA: CITATION XXX), followed by normalization of the variance to one along these dimensions. We chose the smallest number of dimensions that explained at least 90 percent of the variance (acoustic `r length(encodings_pca$encoding[[1]]$fnames)`, acoustic + articulatory `r length(encodings_pca$encoding[[3]]$fnames)`, and articulatory `r length(encodings_pca$encoding[[2]]$fnames)` dimensions). The orthogonal dimensions derived from PCA are statistically prominent vectors in the data (the top five are the five orthogonal dimensions along which our vector representations vary the most). This representation is in a sense optimal for a learner using no criterion but to find a compact representation of the signal. It still encodes all the same features well.
 
 #Conclusions
 

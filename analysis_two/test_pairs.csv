@@ -1,7 +1,7 @@
 fname,x1,x2
 Nasal,b,m
 Nasal,d,n
-Nasal,ɡ,ŋ
+Nasal,g,ŋ
 Continuant,b,v
 Continuant,p,f
 Continuant,d,z
@@ -14,7 +14,7 @@ Palatal,d,dʒ
 Palatal,t,tʃ
 Palatal,s,ʃ
 Palatal,z,ʒ
-Coronal/dorsal,d,ɡ
+Coronal/dorsal,d,g
 Coronal/dorsal,t,k
 Coronal/dorsal,n,ŋ
 Coronal/labial,d,b
@@ -24,7 +24,7 @@ Coronal/labial,z,v
 Coronal/labial,n,m
 Voice,p,b
 Voice,t,d
-Voice,k,ɡ
+Voice,k,g
 Voice,f,v
 Voice,s,z
 Voice,ʃ,ʒ
